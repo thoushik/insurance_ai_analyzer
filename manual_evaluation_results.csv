@@ -1,0 +1,70 @@
+Question,Answer,Context,Latency
+What is the IBNR for 2023?,"To answer the user's question, we need to look at the data in the Excel sheet. According to [Source 1: sample_actuarial_data.xlsx], the sheet ""Sheet1"" contains data with headers: ""Year"", ""IBNR"", ""Loss_Ratio"", and ""Notes"". 
+
+Since the question asks for the IBNR for 2023, we would need to find the row where the ""Year"" is 2023 and look at the corresponding ""IBNR"" value. However, the provided context does not give us the actual values in the sheet, only the headers and the size of the sheet (4 rows x 4 columns).
+
+This information was not found in the provided documents. [Source 1: sample_actuarial_data.xlsx] and [Source 2: sample_actuarial_data.xlsx] do not provide the specific values for the IBNR in 2023. 
+
+To proceed, I would recommend option 2: Explore a specific Excel sheet, to see the actual data in ""Sheet1"" of sample_actuarial_data.xlsx.","[sheet_summary] Sheet: Sheet1 in sample_actuarial_data.xlsx
+Purpose: mixed
+Size: 4 rows x 4 columns
+Contains 0 formulas and 16 values.
+Headers: Year, IBNR, Loss_Ratio, Notes...
+[workbook_summary] Workbook: sample_actuarial_data.xlsx
+This Excel workbook contains 1 sheets: Sheet1.
+Named ranges defined: None...",N/A
+Explain the loss development factors based on the notes.,"This information was not found in the provided documents. The context only mentions that the ""Notes"" column exists in the Excel sheet [Source 1: sample_actuarial_data.xlsx], but it does not provide any information about the content of the ""Notes"" column or the loss development factors. 
+
+To provide a meaningful explanation, I would need more information about the ""Notes"" column. If you would like to explore the Excel sheet further, I can try to help you with that. Please choose one of the options:
+
+1. Deep dive into another document
+2. Explore a specific Excel sheet
+3. Ask about a specific calculation or formula
+4. Return to a high-level summary
+
+Please note that without more information, I won't be able to explain the loss development factors based on the notes. [Source 1: sample_actuarial_data.xlsx] and [Source 2: sample_actuarial_data.xlsx] do not provide sufficient context for this explanation.","[sheet_summary] Sheet: Sheet1 in sample_actuarial_data.xlsx
+Purpose: mixed
+Size: 4 rows x 4 columns
+Contains 0 formulas and 16 values.
+Headers: Year, IBNR, Loss_Ratio, Notes...
+[workbook_summary] Workbook: sample_actuarial_data.xlsx
+This Excel workbook contains 1 sheets: Sheet1.
+Named ranges defined: None...",N/A
+What are the key assumptions mentioned?,"This information was not found in the provided documents. The context only mentions the structure and content of the Excel workbook ""sample_actuarial_data.xlsx"" [Source 1, Source 2], but does not provide any information about key assumptions. 
+
+To find the key assumptions, it would be necessary to explore additional documents or sheets that are not mentioned in the provided context. 
+
+You can choose to:
+1. Deep dive into another document
+2. Explore a specific Excel sheet
+3. Ask about a specific calculation or formula
+4. Return to a high-level summary 
+
+Please select one of the above options to proceed.","[sheet_summary] Sheet: Sheet1 in sample_actuarial_data.xlsx
+Purpose: mixed
+Size: 4 rows x 4 columns
+Contains 0 formulas and 16 values.
+Headers: Year, IBNR, Loss_Ratio, Notes...
+[workbook_summary] Workbook: sample_actuarial_data.xlsx
+This Excel workbook contains 1 sheets: Sheet1.
+Named ranges defined: None...",N/A
+What is the Loss Ratio for 2022?,"To answer the user's question, we need to find the Loss Ratio for the year 2022. 
+
+According to [Source 1], the Excel sheet ""Sheet1"" in the workbook ""sample_actuarial_data.xlsx"" contains a column named ""Loss_Ratio"" and another column named ""Year"". 
+
+However, the provided context does not give us the actual values in the ""Year"" and ""Loss_Ratio"" columns. 
+
+This information was not found in the provided documents. 
+
+If you would like to proceed, I can offer the following options:
+1. Deep dive into another document
+2. Explore a specific Excel sheet
+3. Ask about a specific calculation or formula
+4. Return to a high-level summary","[sheet_summary] Sheet: Sheet1 in sample_actuarial_data.xlsx
+Purpose: mixed
+Size: 4 rows x 4 columns
+Contains 0 formulas and 16 values.
+Headers: Year, IBNR, Loss_Ratio, Notes...
+[workbook_summary] Workbook: sample_actuarial_data.xlsx
+This Excel workbook contains 1 sheets: Sheet1.
+Named ranges defined: None...",N/A

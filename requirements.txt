@@ -1,0 +1,43 @@
+# Insurance Document Intelligence Assistant - RAG Edition
+# Dependencies
+
+# Web Framework (Flask - Legacy)
+flask==3.0.2
+flask-cors==4.0.0
+# fastapi==0.109.0
+# uvicorn[standard]==0.27.0
+# python-multipart==0.0.6
+
+# Streamlit Frontend (Optional)
+# streamlit==1.31.0
+
+# Document Parsing
+openpyxl==3.1.2
+pdfplumber==0.10.3
+
+# LLM Integration
+groq>=0.11.0
+langchain==0.1.5
+langchain-groq==0.0.1
+langchain-community==0.0.16
+
+# Vector Database & Embeddings
+chromadb==0.4.22
+sentence-transformers==2.3.1
+
+# Utilities
+python-dotenv==1.0.0
+markdown==3.5.1
+
+# Security
+pydantic==2.6.0
+
+# Evaluation (Optional)
+ragas==0.0.22
+datasets==2.16.1
+# giskard==2.0.0
+
+# Testing
+pytest==8.0.0
+pytest-cov==4.1.0
+pytest-asyncio==0.23.0
