@@ -84,7 +84,8 @@ class RAGChain:
         self,
         question: str,
         k: int = 5,
-        mask_pii: bool = True
+        mask_pii: bool = True,
+        custom_prompt_template: str = None
     ) -> RAGResponse:
         """
         Process a question through the RAG chain.
@@ -93,6 +94,7 @@ class RAGChain:
             question: User's question
             k: Number of documents to retrieve
             mask_pii: Whether to mask PII in response
+            custom_prompt_template: Optional custom prompt to use instead of default
             
         Returns:
             RAGResponse with answer and sources
@@ -125,7 +127,16 @@ class RAGChain:
         context = "\n\n---\n\n".join(context_parts) if context_parts else "No relevant documents found."
         
         # 3. Format prompt
-        messages = self.prompt.format_messages(
+        if custom_prompt_template:
+            # Create temporary prompt from custom template
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", RAG_SYSTEM_PROMPT),
+                ("human", custom_prompt_template)
+            ])
+        else:
+            prompt = self.prompt
+            
+        messages = prompt.format_messages(
             context=context,
             question=question
         )

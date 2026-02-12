@@ -18,7 +18,8 @@ from .prompts import (
     get_formula_prompt,
     get_calculation_type_prompt,
     NOT_FOUND_RESPONSE,
-    INTERACTIVE_FOLLOWUP
+    INTERACTIVE_FOLLOWUP,
+    ACTUARIAL_COMPARE_PROMPT
 )
 from ..ingestion import get_document_registry
 from ..security import get_audit_logger
@@ -359,9 +360,31 @@ class ResponseHandler:
         Returns:
             RAG response
         """
+        # Keywords for Actuarial Comparative Analysis Mode
+        comparison_keywords = [
+            "compare", "reconcile", "strengthening", "weakening", 
+            "percentage of reserves", "assumptions drive", 
+            "prior development", "ultimate loss", "case reserve", "trend"
+        ]
+        
+        # Check if query triggers comparative mode
+        use_comparative_mode = any(keyword in query.lower() for keyword in comparison_keywords)
+        
         # Use RAG Chain for scalable, grounded answers
         try:
-            response = self.rag_chain.invoke(query)
+            if use_comparative_mode:
+                self.logger.log(
+                    "comparative_analysis_triggered",
+                    "chat",
+                    {"query": query, "mode": "actuarial_comparative"}
+                )
+                response = self.rag_chain.invoke(
+                    query, 
+                    custom_prompt_template=ACTUARIAL_COMPARE_PROMPT
+                )
+            else:
+                response = self.rag_chain.invoke(query)
+                
             # RAG chain returns a RAGResponse object
             if hasattr(response, 'answer'):
                 return response.answer

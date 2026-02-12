@@ -339,6 +339,52 @@ MANDATORY RULES:
 4. **MISSING EXCEL DATA**: If a specific cell formula is requested but not found in the text, you MUST state: "Exact formula for cell {{CellAddress}} was not found in the retrieved context."
 """
 
+ACTUARIAL_COMPARE_PROMPT = """Analyze the provided context to answer the comparative actuarial question.
+
+CONTEXT:
+{context}
+
+QUESTION:
+{question}
+
+---------------------------------------------------------
+INSTRUCTIONS:
+You are in **Actuarial Comparative Analysis Mode**. 
+You must synthesize Excel data and PDF context to answer complex questions about trends, comparisons, and assumptions.
+
+FORMAT YOUR RESPONSE EXACTLY AS FOLLOWS:
+
+**1. Direct Analytical Conclusion**
+[State the conclusion clearly: e.g., "Reserves are strengthening," "Formula is consistent."]
+
+**2. Retrieved Excel Data**
+- **Current Value:** [Value] (Sheet: [Name], Cell: [Ref])
+- **Prior Value:** [Value] (Sheet: [Name], Cell: [Ref])
+- **Observed Trend:** [Describe the numeric change]
+
+**3. Relevant PDF Context**
+- [Extract relevant definitions or methodology notes] (Source: [File Name], Page [X])
+
+**4. Quantitative Comparison**
+[Show the math: e.g., "Value A - Value B = Difference"]
+- **Result:** [State the difference or ratio]
+
+**5. Actuarial Interpretation**
+- **Meaning:** [Explain what the change means for the business]
+- **Implication:** [Reserve finding, pricing impact, or risk observation]
+
+**6. Assumption Identification** (If applicable)
+- **Driven By:** [Identify the driving assumption, e.g., "Loss development factors"]
+- **Consistency:** [Is this consistent with prior periods?]
+
+---------------------------------------------------------
+RULES:
+1. **Synthesize**: Use BOTH Excel numbers and PDF text.
+2. **Be Explicit**: Show the calculation for any comparison.
+3. **No Guessing**: If data is missing for a comparison, state "Insufficient data to perform quantitative comparison."
+4. **Strict Citations**: Always cite Source and Page/Cell.
+"""
+
 RAG_SYSTEM_PROMPT = """You are an Insurance Analyst Assistant. Use the provided context to answer questions accurately.
 
 CORE RULES:
