@@ -91,6 +91,13 @@ class AuditLogger:
         
         return entry
     
+    @staticmethod
+    def _json_serializer(obj):
+        """JSON serializer for objects not serializable by default json code"""
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError(f"Type {type(obj)} not serializable")
+
     def log(
         self,
         action: str,
@@ -110,14 +117,19 @@ class AuditLogger:
             status: Status of the action ("success", "error", "warning")
         """
         entry = self._create_log_entry(action, category, details, user_input, status)
-        log_line = json.dumps(entry, ensure_ascii=False)
         
-        if status == "error":
-            self.logger.error(log_line)
-        elif status == "warning":
-            self.logger.warning(log_line)
-        else:
-            self.logger.info(log_line)
+        try:
+            log_line = json.dumps(entry, ensure_ascii=False, default=self._json_serializer)
+            
+            if status == "error":
+                self.logger.error(log_line)
+            elif status == "warning":
+                self.logger.warning(log_line)
+            else:
+                self.logger.info(log_line)
+        except Exception as e:
+            # Fallback logging if serialization fails
+            self.logger.error(f"Failed to log entry: {str(e)}")
     
     def log_document_access(
         self,

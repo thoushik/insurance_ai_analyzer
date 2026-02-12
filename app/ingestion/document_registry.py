@@ -158,7 +158,7 @@ class DocumentRegistry:
     
     def ingest_folder(self, folder_path: str | Path) -> list[DocumentEntry]:
         """
-        Ingest all supported files from a folder.
+        Ingest all supported files from a folder and remove missing ones.
         
         Args:
             folder_path: Path to the folder
@@ -170,6 +170,9 @@ class DocumentRegistry:
         
         if not safe_path.is_dir():
             raise ValueError(f"Not a directory: {folder_path}")
+        
+        # 1. Sync: Remove "ghost" documents not in this folder
+        self._sync_folder(safe_path)
         
         entries = []
         supported_extensions = [".xlsx", ".xls", ".pdf"]
@@ -191,6 +194,39 @@ class DocumentRegistry:
                     )
         
         return entries
+
+    def _sync_folder(self, folder_path: Path):
+        """
+        Remove registry entries that are not present in the folder.
+        """
+        to_remove = []
+        folder_str = str(folder_path)
+        
+        # Identify missing files
+        for doc_id, doc in self.documents.items():
+            # Check if file belongs to this folder (or subfolder)
+            if doc.filepath.startswith(folder_str):
+                if not Path(doc.filepath).exists():
+                    to_remove.append(doc_id)
+        
+        # Remove them
+        for doc_id in to_remove:
+            self._remove_document(doc_id)
+            
+        if to_remove:
+            self.logger.log(
+                "registry_sync_removed",
+                "ingestion",
+                {"count": len(to_remove), "removed_ids": to_remove}
+            )
+            self._save_registry()
+
+    def _remove_document(self, doc_id: str):
+        """Remove a document from registry and memory."""
+        if doc_id in self.documents:
+            del self.documents[doc_id]
+        if doc_id in self.parsed_data:
+            del self.parsed_data[doc_id]
     
     def get_document(self, doc_id: str) -> Optional[DocumentEntry]:
         """Get a document by ID."""

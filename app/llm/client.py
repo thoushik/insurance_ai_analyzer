@@ -96,36 +96,85 @@ class LLMClient:
         })
         
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            return self._make_request_with_retry(
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens
             )
             
-            # Track tokens
-            usage = response.usage
-            if usage:
-                self.total_tokens_used += usage.total_tokens
-            
-            result = response.choices[0].message.content
-            
-            self.logger.log_response(
-                "llm_generation",
-                len(result),
-                []
-            )
-            
-            return result
-            
         except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "rate limit" in error_msg.lower():
+                self.logger.log(
+                    "rate_limit_exceeded",
+                    "chat",
+                    {"error": error_msg},
+                    status="warning"
+                )
+                return "⚠️ **Rate Limit Exceeded:** The AI service is currently busy. Please wait a few minutes and try again."
+            
+            if "503" in error_msg or "over capacity" in error_msg.lower():
+                self.logger.log(
+                    "service_overloaded",
+                    "chat",
+                    {"error": error_msg},
+                    status="warning"
+                )
+                return "⚠️ **Service Busy:** The AI model is currently over capacity. Please try again in a few moments."
+
             self.logger.log(
                 "llm_error",
                 "chat",
-                {"error": str(e)},
+                {"error": error_msg},
                 status="error"
             )
-            raise
+            # Return a friendly error instead of crashing
+            return f"⚠️ **AI Error:** {error_msg}"
+    
+    def _make_request_with_retry(self, messages, temperature, max_tokens, retries=3):
+        """Make API request with exponential backoff retry."""
+        import time
+        import random
+        
+        last_error = None
+        
+        for attempt in range(retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                
+                # Track tokens
+                usage = response.usage
+                if usage:
+                    self.total_tokens_used += usage.total_tokens
+                
+                result = response.choices[0].message.content
+                
+                self.logger.log_response(
+                    "llm_generation",
+                    len(result),
+                    []
+                )
+                
+                return result
+                
+            except Exception as e:
+                last_error = e
+                error_msg = str(e).lower()
+                
+                # Only retry on rate limits or service overload
+                if "429" in error_msg or "503" in error_msg or "rate limit" in error_msg or "capacity" in error_msg:
+                    sleep_time = (2 ** attempt) + random.uniform(0, 1)
+                    time.sleep(sleep_time)
+                    continue
+                else:
+                    raise e
+        
+        raise last_error
     
     def chat(
         self,
@@ -163,27 +212,39 @@ class LLMClient:
             })
         
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
+            return self._make_request_with_retry(
                 messages=all_messages,
                 temperature=temperature,
                 max_tokens=max_tokens
             )
             
-            usage = response.usage
-            if usage:
-                self.total_tokens_used += usage.total_tokens
-            
-            return response.choices[0].message.content
-            
         except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "rate limit" in error_msg.lower():
+                self.logger.log(
+                    "rate_limit_exceeded",
+                    "chat",
+                    {"error": error_msg},
+                    status="warning"
+                )
+                return "⚠️ **Rate Limit Exceeded:** The AI service is currently busy. Please wait a few minutes and try again."
+
+            if "503" in error_msg or "over capacity" in error_msg.lower():
+                self.logger.log(
+                    "service_overloaded",
+                    "chat",
+                    {"error": error_msg},
+                    status="warning"
+                )
+                return "⚠️ **Service Busy:** The AI model is currently over capacity. Please try again in a few moments."
+
             self.logger.log(
                 "llm_chat_error",
                 "chat",
-                {"error": str(e)},
+                {"error": error_msg},
                 status="error"
             )
-            raise
+            return f"⚠️ **AI Error:** {error_msg}"
     
     def get_token_usage(self) -> int:
         """Get total tokens used in this session."""

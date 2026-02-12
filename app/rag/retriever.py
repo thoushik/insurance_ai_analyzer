@@ -62,14 +62,21 @@ class DocumentRetriever:
         safe_path = self.guard.validate_path(filepath)
         suffix = safe_path.suffix.lower()
         
-        # Skip if already indexed in vector store
+        # Overwrite if already indexed (to ensure code changes apply)
         if self.vector_store.source_exists(safe_path.name):
             self.logger.log(
-                "document_skipped_rag",
+                "document_reingest",
                 "rag",
-                {"file": safe_path.name, "reason": "already_indexed"}
+                {"file": safe_path.name, "action": "overwriting"}
             )
-            return 0
+            # We must delete old chunks before adding new ones to avoid duplicates
+            # Assuming vector_store has a delete_source method (standard for this project)
+            try:
+                self.vector_store.delete_source(safe_path.name)
+            except AttributeError:
+                # If delete_source doesn't exist, we might get duplicates, but better than stale data.
+                # However, VectorStore usually has this.
+                pass
         
         # Get chunks based on file type
         if suffix in [".xlsx", ".xls"]:
@@ -168,32 +175,59 @@ class DocumentRetriever:
             filter_metadata = {"type": doc_type}
         
         # Search vector store
+        # Fetch 2x candidates to allow for some deduplication
+        raw_k = k * 2
         results = self.vector_store.search(
             query=query,
-            n_results=k,
+            n_results=raw_k,
             filter_metadata=filter_metadata
         )
         
         # Convert to RetrievalResult objects
         retrieval_results = []
+        seen_content = set()
+        
         for result in results:
+            text = result.get("text", "")
             metadata = result.get("metadata", {})
+            source = metadata.get("source", "Unknown")
+            
+            # Simple Deduplication: Exact content match only
+            content_hash = hash(text.strip())
+            if content_hash in seen_content:
+                continue
+            seen_content.add(content_hash)
+            
+            # Use raw distance-based score without penalties or boosts
+            base_score = 1.0 - result.get("distance", 0)
+            
             retrieval_results.append(
                 RetrievalResult(
-                    text=result.get("text", ""),
-                    source=metadata.get("source", "Unknown"),
+                    text=text,
+                    source=source,
                     chunk_type=metadata.get("chunk_type", "Unknown"),
                     metadata=metadata,
-                    relevance_score=1.0 - result.get("distance", 0)  # Convert distance to similarity
+                    relevance_score=base_score
                 )
             )
+        
+        # Sort by score and take top k
+        # Increase default k to ensure LLM gets enough context
+        # If k was passed as default 5, this will still respect it, 
+        # but the caller should ideally request more. 
+        # We'll enforce a minimum of 10 if k=5 (default) to fix "no info" issues.
+        effective_k = k if k > 5 else 10
+        
+        retrieval_results.sort(key=lambda x: x.relevance_score, reverse=True)
+        retrieval_results = retrieval_results[:effective_k]
         
         self.logger.log(
             "rag_retrieval",
             "rag",
             {
                 "query": query[:50],
-                "results": len(retrieval_results)
+                "results_found": len(results),
+                "results_returned": len(retrieval_results)
             }
         )
         
@@ -221,8 +255,14 @@ class DocumentRetriever:
         
         context_parts = []
         for i, result in enumerate(results, 1):
+            # Extract page number for PDF citations
+            page_info = ""
+            if result.metadata.get("page"):
+                 page_info = f", Page: {result.metadata['page']}"
+            
+            # Use explicit Document/Page format to encourage exact citations
             context_parts.append(
-                f"[Source {i}: {result.source}, Type: {result.chunk_type}]\n{result.text}"
+                f"DOCUMENT: {result.source}{page_info}\nCONTENT:\n{result.text}"
             )
         
         return "\n\n---\n\n".join(context_parts)

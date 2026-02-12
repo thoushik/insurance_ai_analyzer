@@ -260,6 +260,20 @@ class VectorStore:
             return bool(results and results["ids"])
         except Exception:
             return False
+            
+    def delete_source(self, source: str):
+        """
+        Delete all chunks for a specific source document.
+        
+        Args:
+            source: Source filename
+        """
+        self.collection.delete(where={"source": source})
+        self.logger.log(
+            "source_deleted",
+            "vectorstore",
+            {"source": source}
+        )
     
     def clear(self):
         """Clear all documents from the collection."""

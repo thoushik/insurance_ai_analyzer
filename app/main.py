@@ -70,6 +70,20 @@ app = create_app()
 
 
 if __name__ == "__main__":
+    print("\n\n" + "="*60)
+    print("!!! LOADED FIXED VERSION - CITATION FORMATTING ENABLED !!!")
+    
+    # Auto-ingest existing files to ensure registry is in sync
+    from .ingestion import get_document_registry
+    from .security import get_folder_guard
+    
+    print("Syncing document registry with uploads folder...")
+    registry = get_document_registry()
+    guard = get_folder_guard()
+    registry.ingest_folder(guard.upload_dir)
+    print("Registry sync complete.")
+    
+    print("="*60 + "\n\n")
     # Run on 0.0.0.0:5000 (Standard Flask Port, All Interfaces)
     # Disabled debug reloader to prevent mid-request restarts during heavy ML tasks
     app.run(

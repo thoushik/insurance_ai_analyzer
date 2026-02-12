@@ -52,7 +52,7 @@ class SheetInfo:
             "purpose": self.purpose,
             "cells_with_formulas": self.cells_with_formulas,
             "cells_with_values": self.cells_with_values,
-            "sample_formulas": self.sample_formulas[:5],
+            "sample_formulas": self.sample_formulas,  # Removed [:5] truncation
             "headers": self.headers
         }
 
@@ -188,15 +188,30 @@ class ExcelParser:
                     if isinstance(cell.value, str) and cell.value.startswith("="):
                         sheet_info.cells_with_formulas += 1
                         addr = f"{get_column_letter(col)}{row}"
+                        
+                        # Get calculated value from data_only=True workbook
+                        try:
+                            calc_cell = sheet_values.cell(row=row, column=col)
+                            calc_val = calc_cell.value
+                            data_type = calc_cell.data_type
+                            number_format = calc_cell.number_format
+                        except Exception:
+                            calc_val = "Error"
+                            data_type = "error"
+                            number_format = "General"
+
                         formulas.append({
                             "cell": addr,
-                            "formula": cell.value
+                            "formula": cell.value,
+                            "value": calc_val,
+                            "data_type": data_type,
+                            "number_format": number_format
                         })
                     else:
                         sheet_info.cells_with_values += 1
         
-        # Store more formulas for better RAG retrieval (200 per sheet max)
-        sheet_info.sample_formulas = formulas[:200]
+        # Store more formulas for better RAG retrieval (10000 per sheet max)
+        sheet_info.sample_formulas = formulas[:10000]
         
         # Classify sheet purpose
         sheet_info.purpose = self._classify_sheet(sheet_info)
@@ -362,10 +377,19 @@ Headers: {', '.join(sheet.headers) if sheet.headers else 'None detected'}"""
             for formula_info in sheet.sample_formulas:
                 cell = formula_info.get("cell", "")
                 formula = formula_info.get("formula", "")
+                value = formula_info.get("value", "Not available")
+                data_type = formula_info.get("data_type", "unknown")
+                num_fmt = formula_info.get("number_format", "General")
                 
-                formula_text = f"""Formula in {workbook_info.filename}, Sheet: {sheet.name}, Cell: {cell}
+                # User-requested format with added context for independent analysis
+                formula_text = f"""Workbook: {workbook_info.filename}
+Sheet: {sheet.name} ({sheet.purpose})
+Headers: {', '.join(sheet.headers) if sheet.headers else 'None'}
+Cell: {cell}
 Formula: {formula}
-This is a {sheet.purpose} calculation."""
+Value: {value}
+Data Type: {data_type}
+Format: {num_fmt}"""
                 
                 chunks.append({
                     "text": formula_text,
@@ -375,7 +399,9 @@ This is a {sheet.purpose} calculation."""
                         "chunk_type": "formula",
                         "sheet": sheet.name,
                         "cell": cell,
-                        "formula": formula
+                        "formula": formula,
+                        "value": str(value),
+                        "data_type": str(data_type)
                     }
                 })
         

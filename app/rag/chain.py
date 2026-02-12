@@ -9,54 +9,16 @@ import os
 from typing import Optional
 from dataclasses import dataclass
 
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from .retriever import get_retriever, DocumentRetriever
 from ..security import get_audit_logger, get_pii_masker
-
-
-# RAG System Prompt - SR 11-7 compliant
-RAG_SYSTEM_PROMPT = """You are an Insurance Document Intelligence Assistant designed for actuarial, regulatory, and risk analysis.
-
-You are answering questions using ONLY the retrieved document context provided below.
-
-CRITICAL RULES:
-1. Use ONLY information from the provided context
-2. Do NOT invent formulas, calculations, or assumptions
-3. If information is not in the context, say: "This information was not found in the provided documents."
-4. Always cite your sources using [Source N] references
-5. Explain insurance concepts clearly for actuaries and regulators
-
-FORMULA FORMATTING:
-- Display formulas in code format using backticks: `=FORMULA_HERE`
-- Number each formula explanation (1., 2., 3., etc.)
-- Bold formula names: **Formula Name:**
-- Explain what each formula calculates in plain language
-
-Follow SR 11-7 principles:
-- Explainability
-- Traceability  
-- No hallucination"""
-
-
-RAG_PROMPT_TEMPLATE = """CONTEXT (Retrieved from uploaded documents):
-{context}
-
----
-
-USER QUESTION:
-{question}
-
-Please answer based ONLY on the context above. Cite sources using [Source N] format.
-
----
-**Would you like to:**
-1. Deep dive into another document
-2. Explore a specific Excel sheet
-3. Ask about a specific calculation or formula
-4. Return to a high-level summary"""
+from ..llm.prompts import RAG_PROMPT_TEMPLATE, RAG_SYSTEM_PROMPT
 
 
 @dataclass
@@ -106,6 +68,7 @@ class RAGChain:
         )
         
         # Create prompt template
+        
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", RAG_SYSTEM_PROMPT),
             ("human", RAG_PROMPT_TEMPLATE)
@@ -142,8 +105,14 @@ class RAGChain:
         sources = []
         
         for i, result in enumerate(retrieval_results, 1):
+            # Extract page number for PDF citations
+            page_info = ""
+            if result.metadata.get("page"):
+                 page_info = f", Page: {result.metadata['page']}"
+            
+            # Use explicit Document/Page format to encourage exact citations
             context_parts.append(
-                f"[Source {i}: {result.source}]\n{result.text}"
+                f"DOCUMENT: {result.source}{page_info}\nCONTENT:\n{result.text}"
             )
             sources.append({
                 "index": i,

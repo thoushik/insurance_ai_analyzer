@@ -233,10 +233,47 @@ class ResponseHandler:
         if not formulas:
             return f"No formulas were extracted from sheet '{sheet_name}'. The sheet may contain only values, or formulas may be protected."
         
-        formula_text = "\n".join(
-            f"- Cell {f['cell']}: {f['formula']}"
-            for f in formulas
-        )
+        import re
+        # Try to find a specific cell reference in the message (e.g. F24, AA12)
+        # Look for pattern: word boundary, 1-2 letters, 1-3 digits, word boundary
+        target_cell = None
+        
+        # We need the message to extract the cell. 
+        # Since handle_formula_analysis doesn't take message, we'll try to find it 
+        # in self.messages[-1] if it exists and is from user.
+        last_message = ""
+        if self.messages and self.messages[-1]["role"] == "user":
+            last_message = self.messages[-1]["content"]
+            
+        cell_match = re.search(r'\b([A-Z]{1,2}[0-9]{1,3})\b', last_message.upper())
+        if cell_match:
+            target_cell = cell_match.group(1)
+        
+        # If we have a target cell, filter formulas to ONLY include that one + dependencies
+        # This prevents the LLM from seeing other formulas and getting confused
+        if target_cell:
+            # Check if we have the specific formula
+            specific_formula = next((f for f in formulas if f['cell'] == target_cell), None)
+            
+            if specific_formula:
+                # Found it! Show full rich metadata
+                formula_text = f"""CONFIRMED METADATA FOUND:
+- Cell: {specific_formula['cell']}
+- Formula: {specific_formula['formula']}
+- Value: {specific_formula.get('value', 'N/A')}
+- Data Type: {specific_formula.get('data_type', 'unknown')}
+- Number Format: {specific_formula.get('number_format', 'General')}"""
+            else:
+                # Not found in metadata. 
+                # We still pass the target_cell to the prompt so the LLM knows what to look for
+                # and can fail properly.
+                formula_text = f"CRITICAL: The specific formula for {target_cell} was NOT found in the sheet metadata. The user is asking about {target_cell}, but it is not in the index. You must state that the cell was not found."
+        else:
+            # Fallback to showing all samples if no specific cell asked
+            formula_text = "\n".join(
+                f"- Cell {f['cell']}: {f['formula']}"
+                for f in formulas
+            )
 
         # Build sheet context from metadata
         context_parts = []
@@ -253,7 +290,8 @@ class ResponseHandler:
             doc_name=entry.filename,
             sheet_name=sheet_name,
             formulas=formula_text,
-            sheet_context=sheet_context
+            sheet_context=sheet_context,
+            target_cell=target_cell
         )
         
         self.logger.log_query(
@@ -324,16 +362,32 @@ class ResponseHandler:
         # Use RAG Chain for scalable, grounded answers
         try:
             response = self.rag_chain.invoke(query)
-            return response.answer
+            # RAG chain returns a RAGResponse object
+            if hasattr(response, 'answer'):
+                return response.answer
+            # Fallback for dict (if changed later)
+            if isinstance(response, dict) and 'answer' in response:
+                return response['answer']
+            return str(response)
             
         except Exception as e:
+            error_msg = str(e)
+            if "429" in error_msg or "rate limit" in error_msg.lower():
+                self.logger.log(
+                    "rate_limit_exceeded",
+                    "chat",
+                    {"error": error_msg},
+                    status="warning"
+                )
+                return "⚠️ **Rate Limit Exceeded:** The AI service is currently busy. Please wait a few minutes and try again."
+            
             self.logger.log(
                 "rag_error",
                 "chat",
-                {"error": str(e)},
+                {"error": error_msg},
                 status="error"
             )
-            return f"I encountered an error while processing your request: {str(e)}"
+            return f"I encountered an error while processing your request: {error_msg}"
     
     def process_message(self, message: str) -> str:
         """
@@ -381,6 +435,26 @@ class ResponseHandler:
             else:
                 response = "Invalid selection. Please try again."
         
+        # Smart Routing for Excel: Check if message mentions a specific sheet
+        # This bypasses RAG for specific formula/sheet questions to ensure 100% retrieval reliability
+        for doc_id, entry in self.registry.documents.items():
+            if entry.doc_type == "excel":
+                for sheet in entry.metadata.get("sheets", []):
+                    sheet_name = sheet["name"]
+                    # distinct check: ensure sheet name is actually in the message
+                    if sheet_name.lower() in message_lower:
+                        self.logger.log(
+                            "smart_routing_triggered",
+                            "chat",
+                            {"sheet": sheet_name, "doc": entry.filename}
+                        )
+                        
+                        # Check for formula/cell specific intent
+                        if any(kw in message_lower for kw in ["formula", "calc", "value", "cell", "row", "col", "f24"]):
+                            return self.handle_formula_analysis(doc_id, sheet_name)
+                        else:
+                            return self.handle_sheet_analysis(doc_id, sheet_name)
+
         else:
             # General query
             response = self.handle_general_query(message)

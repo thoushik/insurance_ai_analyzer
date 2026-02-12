@@ -143,6 +143,7 @@ Provide a structured analysis in the following format:
 **Calculation Flow:**
 - Describe the logical steps of calculations performed in this sheet.
 - Describe the order of operations if observable.
+- Highlight key formulas and their actuarial significance.
 
 **Upstream Dependencies:**
 - Where does the data come from? (e.g., specific input sheets, external data).
@@ -150,10 +151,11 @@ Provide a structured analysis in the following format:
 
 **Downstream Usage:**
 - Where do these results go? (e.g., summary sheets, financial reports).
+- Explain the impact of this sheet on the final results.
 
 **Business Interpretation:**
 - Explain what the numbers *mean* for the insurance business.
-- Highlight any key assumptions or risks visible in the structure.
+- Highlight any key assumptions, risks, or trends visible in the structure.
 
 SHEET DETAILS:
 {sheet_details}
@@ -171,37 +173,31 @@ Sheet: {sheet_name}
 
 You must analyze the FULL CONTEXT of the sheet before answering.
 
-FORMAT YOUR RESPONSE AS FOLLOWS:
+FORMAT YOUR RESPONSE EXACTLY AS FOLLOWS:
 
-**Sheet Purpose:**
-[Briefly explain what this sheet does in actuarial terms (Input/Calculation/Output)]
+**1. Formula in Cell {{CellAddress}} of the {sheet_name} Sheet**
+Based on the structure of the `{sheet_name}` sheet on the uploaded template, **Cell {{CellAddress}}** is part of [Explain the context/section of the sheet].
 
-**Calculation Flow:**
-[Briefly explain the logical flow of calculations in this sheet]
+*   **Value/Formula:** The cell contains the value `[Value]`.
+*   **Explanation:** [Explain what this cell represents in actuarial terms].
+    *   **Formula Logic:** ` [ExactFormula] `
+    *   **Meaning:** [Explain what the formula does, e.g., "It takes the value of X and adds Y..."].
 
-**Formula Breakdown:**
-For EACH requested formula, use this exact structure:
+**Context: The {sheet_name} Calculation**
+[Provide a paragraph explaining the broader calculation context of this sheet/table.]
 
-> **[Cell Reference/Name]**: `[EXACT FORMULA SYNTAX]`
+> [Optional: Show the conceptual mathematical formula if applicable, e.g., "Ratio = Loss / Premium"]
 
-- **Referenced Cells**: [Explain what each referenced cell represents. If it references another sheet, explain what that sheet contains.]
-- **Calculation Logic**: [Explain the mathematical operation.]
-- **Actuarial Meaning**: [Explain what this result represents in insurance terms (e.g., "This calculates the ultimate loss ratio for AY 2023").]
-- **Role**: [Explain why this calculation is necessary in the workflow.]
-
-**Upstream Dependencies:**
-[Identify where the input values come from (e.g., "DataMain sheet column C", "Assumption table in Admin sheet")]
-
-**Business Interpretation:**
-[Synthesize the findings. What does this tell us about the risk, performance, or methodology?]
+*   [Explain the significance/usage of this calculation for the actuary].
 
 RULES:
-- Do NOT only explain the syntax (e.g., "It sums A and B"). Explain the *business logic* (e.g., "It aggregates incurred losses").
-- If deeper dependency tracing is not available, state: "Deep dependency tracing is limited by extracted context."
+- **ULTRA STRICT MODE**: This logic applies ONLY when the user asks about a specific Excel cell.
+- **Stop Condition**: If the formula/value is missing, output: "Exact formula for {sheet_name}!{{CellAddress}} was not found in retrieved Excel context. No calculation can be performed."
+- **No Guessing**: Do not explain nearby rows, headers, or infer patterns.
+- **Mandatory Numeric Evaluation**: You MUST calculate the result if values are available.
 - Use backticks (`) for all formulas.
-- Do NOT invent or guess formulas.
 
-EXTRACTED FORMULAS:
+EXTRA METADATA:
 {formulas}"""
 
 
@@ -281,8 +277,87 @@ Please verify that:
 
 
 # ============================================================================
+# 11. RAG QUESTION ANSWERING PROMPT
+# ============================================================================
+
+RAG_PROMPT_TEMPLATE = """Answer the user's question using ONLY the provided document context.
+
+CONTEXT FROM DOCUMENTS:
+{context}
+
+USER QUESTION: 
+{question}
+
+---------------------------------------------------------
+INSTRUCTIONS FOR ANSWER FORMATTING:
+
+You must use the **Structured Professional Insurance Response Mode** for all answers.
+Follow the specific format below based on the type of question.
+
+### CASE 1: EXCEL / FORMULA ANALYSIS
+If the user asks about Excel formulas, specific cells, or calculations:
+
+**1. Formula Logic & Purpose**
+   - **Cell:** {{CellAddress}} (Sheet: [Sheet Name])
+   - **Formula:** ` [Exact Formula] `
+   - **Value:** [Value]
+   - **Actuarial Purpose:** [Explain what this variable represents, e.g., "Defines the maturity period for IBNR factors"]
+
+**2. Calculation Context**
+   - **Logic:** [Explain the step-by-step calculation logic]
+   - **Variables:** [Define what the referenced cells represent]
+
+**3. Professional Interpretation**
+   - **Actuarial Implication:** [Explain the impact on reserves, pricing, or risk]
+   - **Downstream Impact:** [How this result affects the final mode/output]
+
+---
+
+### CASE 2: GENERAL / PDF / TEXT ANALYSIS
+If the user asks about policy, surveys, AI governance, or general topics:
+
+**1. Direct Answer**
+   [Provide a concise, precise 2-3 sentence summary of the answer.]
+
+**2. Evidence from Source**
+   - **[Key Point]:** [Detail] (Source: [File Name], Page [X])
+   - **[Key Point]:** [Detail] (Source: [File Name], Page [Y])
+   *(List exact page numbers/sections. If missing, state "Page metadata unavailable".)*
+
+**3. Technical / Regulatory Interpretation**
+   - **Meaning:** [Explain what this means for the insurer/policymaker]
+   - **Implication:** [Indicate risk, growth, compliance issue, or governance gap]
+
+**4. Professional Context**
+   - [Add broader context: e.g., "This aligns with NAIC concerns on..." or "This suggests a trend towards..."]
+
+---------------------------------------------------------
+MANDATORY RULES:
+1. **NO GENERIC CITATIONS**: Never use "[Source 1]". Always use "(Source: File.pdf, Page X)".
+2. **NO HALLUCINATIONS**: If the answer is not in the context, explicitly state: "The provided documents do not contain this information."
+3. **PROFESSIONAL TONE**: Write like an actuary or auditor. Be precise, objective, and structured.
+4. **MISSING EXCEL DATA**: If a specific cell formula is requested but not found in the text, you MUST state: "Exact formula for cell {{CellAddress}} was not found in the retrieved context."
+"""
+
+RAG_SYSTEM_PROMPT = """You are an Insurance Analyst Assistant. Use the provided context to answer questions accurately.
+
+CORE RULES:
+1. Do not hallucinate.
+2. If the answer isn't in the context, admit it.
+   EXCEPTION: For Excel queries, if a specific cell is missing but the column's formula logic is visible in the context, you MAY infer and explain the column's logic.
+3. FOLLOW THE FORMATTING INSTRUCTIONS provided in the user prompt exactly."""
+
+
+# ============================================================================
 # Helper function to build prompts
 # ============================================================================
+
+def get_rag_prompt(context: str, question: str) -> str:
+    """Get the RAG analysis prompt."""
+    return RAG_PROMPT_TEMPLATE.format(
+        context=context,
+        question=question
+    )
 
 def build_prompt(
     template: str,
@@ -361,15 +436,21 @@ def get_formula_prompt(
     doc_name: str,
     sheet_name: str,
     formulas: str,
-    sheet_context: str = ""
+    sheet_context: str = "",
+    target_cell: str = None
 ) -> str:
     """Get the formula-level analysis prompt."""
-    return FORMULA_LEVEL_PROMPT.format(
+    prompt = FORMULA_LEVEL_PROMPT.format(
         document_name=doc_name,
         sheet_name=sheet_name,
         formulas=formulas,
         sheet_context=sheet_context
     )
+    
+    if target_cell:
+        prompt += f"\n\nUSER REQUESTED CELL: {target_cell}\nVERIFICATION: You must ONLY analyze the cell '{target_cell}'. If '{target_cell}' is not in the 'EXTRACTED FORMULAS' list above, you must respond with the exact STOP MESSAGE."
+        
+    return prompt
 
 
 def get_calculation_type_prompt(context: str) -> str:
