@@ -208,7 +208,33 @@ def refresh_uploads():
         
         # Build file list for response
         file_list = "\n".join([f"- {f['name']} ({f['type']})" for f in files_found])
-        message = f"The insurance data folder has been successfully ingested.\n**Documents found:**\n{file_list}\n\n_Documents are being processed in the background. You can start asking questions shortly._"
+        # Executive Summary Block
+        STATIC_EXECUTIVE_SUMMARY = """
+────────────────────────────────
+**Executive Summary – Overview of Uploaded Files**
+────────────────────────────────
+
+The uploaded dataset contains both actuarial modeling templates and regulatory survey documentation.
+
+The Excel files include incidence models, utilization models, and a Hindsight IBNR-to-Case Ratio template used for reserve analysis and loss development evaluation.
+
+The IBNR template supports calculation of incurred but not reported reserves and related ratios for actuarial review.
+
+The PDF reports summarize industry usage of AI/ML in underwriting, pricing, claims, and governance practices.
+
+Together, these documents enable quantitative reserve analysis (Excel) and contextual regulatory insight (PDF).
+
+The system is ready to support:
+
+Formula-level actuarial analysis
+
+Reserve adequacy evaluation
+
+Trend and reconciliation testing
+
+Governance and policy review
+"""
+        message = f"The insurance data folder has been successfully ingested.\n**Documents found:**\n{file_list}\n\n_Documents are being processed in the background. You can start asking questions shortly._\n\n{STATIC_EXECUTIVE_SUMMARY}"
         
         return jsonify({
             "success": True,

@@ -68,14 +68,58 @@ INGESTION_CONFIRMATION_PROMPT = """The insurance data folder has been successful
 **Documents found:**
 {document_list}
 
-Do you want a (high-level) Executive Summary of what is going on in these files?
+📌 Executive Summary – Overview of Uploaded Files
+
+The uploaded dataset contains both actuarial modeling templates and regulatory survey documentation.
+
+The Excel files include incidence models, utilization models, and a Hindsight IBNR-to-Case Ratio template used for reserve analysis and loss development evaluation.
+
+The IBNR template supports calculation of incurred but not reported reserves and related ratios for actuarial review.
+
+The PDF reports summarize industry usage of AI/ML in underwriting, pricing, claims, and governance practices.
+
+Together, these documents enable quantitative reserve analysis (Excel) and contextual regulatory insight (PDF).
+
+The system is ready to support:
+
+Formula-level actuarial analysis
+
+Reserve adequacy evaluation
+
+Trend and reconciliation testing
+
+Governance and policy review
 
 ---
 **Would you like to:**
-1. Yes, provide an Executive Summary
-2. Deep dive into a specific document
-3. List all documents with details
-4. Ask a specific question
+1. Deep dive into a specific document
+2. Explore a specific Excel sheet
+3. Ask about a specific calculation or row
+4. Return to a high-level summary
+"""
+
+STATIC_EXECUTIVE_SUMMARY = """
+📌 Executive Summary – Overview of Uploaded Files
+
+The uploaded dataset contains both actuarial modeling templates and regulatory survey documentation.
+
+The Excel files include incidence models, utilization models, and a Hindsight IBNR-to-Case Ratio template used for reserve analysis and loss development evaluation.
+
+The IBNR template supports calculation of incurred but not reported reserves and related ratios for actuarial review.
+
+The PDF reports summarize industry usage of AI/ML in underwriting, pricing, claims, and governance practices.
+
+Together, these documents enable quantitative reserve analysis (Excel) and contextual regulatory insight (PDF).
+
+The system is ready to support:
+
+Formula-level actuarial analysis
+
+Reserve adequacy evaluation
+
+Trend and reconciliation testing
+
+Governance and policy review
 """
 
 
