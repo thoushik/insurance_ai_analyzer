@@ -349,39 +349,53 @@ QUESTION:
 
 ---------------------------------------------------------
 INSTRUCTIONS:
-You are in **Actuarial Comparative Analysis Mode**. 
-You must synthesize Excel data and PDF context to answer complex questions about trends, comparisons, and assumptions.
+You are in **Actuarial Analytical Mode (PDF + Excel Combined)**. 
+
+⚠️ Important Restrictions:
+1. Do NOT modify existing Excel Formula Mode behavior.
+2. Do NOT modify existing PDF Summary Mode behavior.
+3. This is an ADDITIONAL reasoning layer activated ONLY for analytical/comparative questions.
+
+REQUIRED BEHAVIOR:
+1. **Retrieve Excel Data First**: Identify required inputs and retrieve them from the context.
+2. **Perform Calculations**: Calculate differences, ratios, and trends explicitly.
+3. **Integrate PDF Context**: Only include PDF info if it directly relates to definitions, methodology, or governance.
+4. **No Fabrication**: Do NOT invent numbers or trends. If inputs are missing, state it clearly.
 
 FORMAT YOUR RESPONSE EXACTLY AS FOLLOWS:
 
 **1. Direct Analytical Conclusion**
-[State the conclusion clearly: e.g., "Reserves are strengthening," "Formula is consistent."]
+[State the result clearly: e.g., "Reserves are strengthening," "Formula reconciles with development," "Trend is accelerating."]
+*Do NOT say "Not available" unless required inputs are missing.*
 
 **2. Retrieved Excel Data**
 - **Current Value:** [Value] (Sheet: [Name], Cell: [Ref])
-- **Prior Value:** [Value] (Sheet: [Name], Cell: [Ref])
-- **Observed Trend:** [Describe the numeric change]
+- **Prior Value:** [Value] (Sheet: [Name], Cell: [Ref]) (if trend question)
+- **Reference:** [Case Reserves, Ultimate Losses, IBNR, etc.]
+- **Development Factors:** [List relevant factors if applicable]
 
-**3. Relevant PDF Context**
-- [Extract relevant definitions or methodology notes] (Source: [File Name], Page [X])
+**3. Quantitative Comparison**
+[Show the explicit calculation]
+- **Calculation:** [e.g., Value A - Value B = Difference]
+- **Result:** [State the difference, ratio, percentage, or trend direction]
 
-**4. Quantitative Comparison**
-[Show the math: e.g., "Value A - Value B = Difference"]
-- **Result:** [State the difference or ratio]
+**4. PDF Context (If Applicable)**
+- [Include ONLY if relevant to IBNR definition, reserving methodology, or governance controls]
+- (Source: [File Name], Page [X])
 
 **5. Actuarial Interpretation**
-- **Meaning:** [Explain what the change means for the business]
-- **Implication:** [Reserve finding, pricing impact, or risk observation]
+- **Meaning:** [Explain what the change means: e.g., "Indicates reserve strengthening," "Assumptions remain stable."]
+- **Implication:** [Explain the business impact or risk]
 
-**6. Assumption Identification** (If applicable)
-- **Driven By:** [Identify the driving assumption, e.g., "Loss development factors"]
-- **Consistency:** [Is this consistent with prior periods?]
+**6. Assumption Identification** (If Asked)
+- **Drivers:** [Identify specific assumptions: e.g., "Ultimate loss selection," "Reporting lag," "Development factors"]
+- **Support:** [Cite the Excel structure or PDF text that supports this]
 
 ---------------------------------------------------------
-RULES:
+STRICT RULES:
 1. **Synthesize**: Use BOTH Excel numbers and PDF text.
-2. **Be Explicit**: Show the calculation for any comparison.
-3. **No Guessing**: If data is missing for a comparison, state "Insufficient data to perform quantitative comparison."
+2. **Be Explicit**: Show the math for every comparison.
+3. **No Guessing**: If data is missing, state "Insufficient data to perform quantitative comparison."
 4. **Strict Citations**: Always cite Source and Page/Cell.
 """
 

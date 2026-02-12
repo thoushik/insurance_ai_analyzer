@@ -78,10 +78,14 @@ if __name__ == "__main__":
     from .security import get_folder_guard
     
     print("Syncing document registry with uploads folder...")
-    registry = get_document_registry()
-    guard = get_folder_guard()
-    registry.ingest_folder(guard.upload_dir)
-    print("Registry sync complete.")
+    try:
+        registry = get_document_registry()
+        guard = get_folder_guard()
+        registry.ingest_folder(guard.upload_dir)
+        print("Registry sync complete.")
+    except Exception as e:
+        print(f"ERROR during registry sync: {e}")
+        print("Continuing application startup despite ingestion error...")
     
     print("="*60 + "\n\n")
     # Run on 0.0.0.0:5000 (Standard Flask Port, All Interfaces)

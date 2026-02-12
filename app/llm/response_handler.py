@@ -364,7 +364,9 @@ class ResponseHandler:
         comparison_keywords = [
             "compare", "reconcile", "strengthening", "weakening", 
             "percentage of reserves", "assumptions drive", 
-            "prior development", "ultimate loss", "case reserve", "trend"
+            "prior development", "ultimate loss", "case reserve", "trend",
+            "proportion", "consistency", "acceleration", "sensitivity",
+            "year-over-year", "development factors", "governance of reserving"
         ]
         
         # Check if query triggers comparative mode

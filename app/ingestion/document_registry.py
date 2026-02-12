@@ -71,6 +71,13 @@ class DocumentRegistry:
                     status="error"
                 )
     
+    @staticmethod
+    def _json_serializer(obj):
+        """JSON serializer for objects not serializable by default json code"""
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        raise TypeError(f"Type {type(obj)} not serializable")
+
     def _save_registry(self):
         """Save registry to cache file."""
         data = {
@@ -79,7 +86,7 @@ class DocumentRegistry:
         }
         self.guard.safe_write(
             self.cache_file,
-            json.dumps(data, indent=2, ensure_ascii=False)
+            json.dumps(data, indent=2, ensure_ascii=False, default=self._json_serializer)
         )
     
     def _generate_id(self, filename: str) -> str:
