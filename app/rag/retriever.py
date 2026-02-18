@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from ..vectorstore import get_vector_store, VectorStore, DocumentChunk
 from ..ingestion import get_excel_parser, get_pdf_parser
-from ..security import get_folder_guard, get_audit_logger
+from ..security import get_folder_guard, get_audit_logger, get_pii_masker
 
 
 @dataclass
@@ -92,6 +92,24 @@ class DocumentRetriever:
             )
             return 0
         
+        # PII Masking Layer 1: Mask chunk text BEFORE embedding
+        pii_masker = get_pii_masker()
+        total_pii_report = {}
+        for chunk in chunks:
+            chunk["text"], report = pii_masker.mask(chunk["text"])
+            for pii_type, count in report.items():
+                total_pii_report[pii_type] = total_pii_report.get(pii_type, 0) + count
+
+        if total_pii_report:
+            self.logger.log(
+                "pii_masked_at_ingestion",
+                "security",
+                {
+                    "file": safe_path.name,
+                    "pii_counts": total_pii_report
+                }
+            )
+
         # Convert to DocumentChunk objects
         doc_chunks = [
             DocumentChunk(

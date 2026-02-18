@@ -126,6 +126,15 @@ class RAGChain:
         
         context = "\n\n---\n\n".join(context_parts) if context_parts else "No relevant documents found."
         
+        # PII Masking Layer 2: Double-safety mask before sending to LLM
+        context, pii_report = self.pii_masker.mask(context)
+        if pii_report:
+            self.logger.log(
+                "pii_masked_before_llm",
+                "security",
+                {"pii_counts": pii_report}
+            )
+        
         # 3. Format prompt
         if custom_prompt_template:
             # Create temporary prompt from custom template
