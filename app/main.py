@@ -44,6 +44,9 @@ def create_app():
     # Register blueprints
     app.register_blueprint(api, url_prefix="/api")
     
+    from .evaluation.eval_routes import eval_api
+    app.register_blueprint(eval_api, url_prefix="/api/eval")
+    
     # Main route
     @app.route("/")
     def index():
