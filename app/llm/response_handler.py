@@ -23,7 +23,6 @@ from .prompts import (
 )
 from ..ingestion import get_document_registry
 from ..security import get_audit_logger
-from ..rag.chain import get_rag_chain  # Added for RAG
 
 
 class ResponseHandler:
@@ -41,6 +40,8 @@ class ResponseHandler:
         self.llm = get_llm_client()
         self.registry = get_document_registry()
         self.logger = get_audit_logger()
+        
+        from ..rag.chain import get_rag_chain
         self.rag_chain = get_rag_chain()  # Initialize RAG
         
         # Chat history
