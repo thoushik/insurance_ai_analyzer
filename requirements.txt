@@ -32,10 +32,10 @@ markdown==3.5.1
 # Security
 pydantic==2.6.0
 
-# Evaluation (Optional)
-ragas==0.0.22
+# Evaluation
+ragas>=0.4.0
 datasets==2.16.1
-# giskard==2.0.0
+giskard>=2.15.0
 
 # Testing
 pytest==8.0.0
