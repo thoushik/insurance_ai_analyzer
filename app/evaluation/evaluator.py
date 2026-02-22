@@ -78,6 +78,7 @@ class RAGEvaluator:
             temperature=0.0,
             max_tokens=500,
         )
+        self.langchain_llm = chat_groq
         self.ragas_llm = LangchainLLMWrapper(chat_groq)
 
         # HuggingFace embeddings for both RAGAS and custom context metrics
@@ -177,18 +178,69 @@ class RAGEvaluator:
             )
             dataset = EvaluationDataset(samples=[sample])
 
-            ragas_result = evaluate(
-                dataset=dataset,
-                metrics=self.ragas_metrics,
-                llm=self.ragas_llm,
-                embeddings=self.ragas_embeddings,
-            )
-
-            scores_df = ragas_result.to_pandas()
-            row = scores_df.iloc[0]
-
-            result.faithfulness = max(0.0, min(float(row.get("faithfulness", 0.0)), 1.0))
-            result.answer_relevancy = max(0.0, min(float(row.get("answer_relevancy", 0.0)), 1.0))
+            # We must compute Faithfulness and Answer Relevancy synchronously 
+            # because the official `ragas.evaluate()` forces asyncio and completely deadlocks Flask WSGI.
+            
+            import json
+            import time
+            import re
+            
+            def _extract_score(text: str, metric_name: str) -> float:
+                # Log raw output
+                with open("logs/debug_llm_json.txt", "a", encoding="utf-8") as f:
+                    f.write(f"\n--- {time.time()} | {metric_name} raw text ---\n")
+                    f.write(text + "\n")
+                    f.write("-" * 40 + "\n")
+                    
+                # 1. Try to extract strictly from JSON-like `"score": X.XX` structure
+                match = re.search(r'"score"\s*:\s*(0\.\d+|1\.0)', text)
+                if match:
+                    return float(match.group(1))
+                    
+                # 2. Hard fallback: Just grab the first number between 0.0 and 1.0
+                matches = re.findall(r"0\.\d+|1\.0", text)
+                if matches:
+                    return float(matches[0])
+                    
+                return 0.5
+            
+            # 1. Synchronous Faithfulness (LLM)
+            faith_prompt = f"""
+            You are a strict evaluation JSON API. Find if ANY information in the Answer is NOT in the Context.
+            Output ONLY valid JSON matching this exact schema: {{"score": float}}
+            The score must be between 0.0 and 1.0. 1.0 = All facts supported. 0.0 = Hallucinations present.
+            
+            Context: {retrieved_contexts}
+            Answer: {answer}
+            """
+            
+            try:
+                faith_result = self.langchain_llm.invoke(faith_prompt)
+                result.faithfulness = _extract_score(faith_result.content, "Faithfulness")
+            except Exception as e:
+                logger.warning(f"Sync faithfulness failed to parse: {e} | Content: {faith_result.content if 'faith_result' in locals() else 'None'}")
+                result.faithfulness = 0.5
+                
+            # 2. Synchronous Answer Relevancy (LLM)
+            rel_prompt = f"""
+            You are a strict evaluation JSON API. Find how relevant the Answer is to the Question.
+            Output ONLY valid JSON matching this exact schema: {{"score": float}}
+            The score must be between 0.0 and 1.0. 1.0 = Direct, concise, perfect answer. 0.0 = Evasive, completely unrelated.
+            
+            Question: {question}
+            Answer: {answer}
+            """
+            
+            try:
+                rel_result = self.langchain_llm.invoke(rel_prompt)
+                result.answer_relevancy = _extract_score(rel_result.content, "Relevancy")
+            except Exception as e:
+                logger.warning(f"Sync relevancy failed to parse: {e} | Content: {rel_result.content if 'rel_result' in locals() else 'None'}")
+                result.answer_relevancy = 0.5
+                
+            # Ensure bounds
+            result.faithfulness = max(0.0, min(result.faithfulness, 1.0))
+            result.answer_relevancy = max(0.0, min(result.answer_relevancy, 1.0))
 
         except Exception as e:
             logger.warning("RAGAS evaluation failed: %s", e)
