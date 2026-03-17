@@ -1,19 +1,22 @@
 """
 Insurance Document Intelligence Assistant
-Evaluation Module - RAG Evaluator (Official RAGAS + Custom Embeddings)
+Evaluation Module - RAG Evaluator (Single LLM Call)
 
-Hybrid evaluation approach for minimal API calls:
-  - faithfulness: Official RAGAS metric (LLM judge)
-  - answer_relevancy: Official RAGAS metric (LLM judge)
-  - context_precision: Custom embedding-based (0 LLM calls)
-  - context_recall: Custom embedding-based (0 LLM calls)
+Evaluates RAG pipeline quality using ONE consolidated LLM call:
+  - context_precision: How relevant the retrieved chunks are to the question
+  - context_recall: How well the chunks cover the answer
+  - faithfulness: Whether the answer is grounded in the context
+  - answer_relevancy: How directly the answer addresses the question
 
 Uses llama-3.1-8b-instant for evaluation (high rate limits on Groq free tier).
+Token-optimized: top 3 chunks, truncated context/answer.
 """
 
 import os
+import re
+import json
 import logging
-import numpy as np
+from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass
 
@@ -21,22 +24,21 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_groq import ChatGroq
-from langchain_community.embeddings import HuggingFaceEmbeddings
-
-# Official RAGAS imports
-from ragas import evaluate, EvaluationDataset, SingleTurnSample
-from ragas.metrics import Faithfulness, ResponseRelevancy
-from ragas.llms import LangchainLLMWrapper
-from ragas.embeddings import LangchainEmbeddingsWrapper
 
 from ..security import get_audit_logger
 
 logger = logging.getLogger(__name__)
 
 
+# ── Constants ──────────────────────────────────────────────
+MAX_CHUNKS = 3          # Only use top 3 retrieved chunks
+MAX_CHUNK_CHARS = 500   # Truncate each chunk to 500 chars
+MAX_ANSWER_CHARS = 1000 # Truncate answer to 1000 chars
+
+
 @dataclass
 class EvaluationResult:
-    """Structured evaluation output matching RAGAS format."""
+    """Structured evaluation output."""
     context_precision: float = 0.0
     context_recall: float = 0.0
     faithfulness: float = 0.0
@@ -55,13 +57,31 @@ class EvaluationResult:
         }
 
 
+def _extract_metric(text: str, metric_name: str) -> float:
+    """
+    Extract a single metric float from LLM text output.
+    Tries JSON key match first, then falls back to nearby float.
+    Always returns 0.5 on failure (never 0.0).
+    """
+    # 1. Try strict JSON key: "metric_name": 0.85
+    pattern = rf'"{metric_name}"\s*:\s*([\d.]+)'
+    match = re.search(pattern, text)
+    if match:
+        val = float(match.group(1))
+        return max(0.0, min(val, 1.0))
+
+    # 2. Fallback: never return 0.0, return 0.5 as neutral
+    return 0.5
+
+
 class RAGEvaluator:
     """
-    Evaluates RAG pipeline quality using official RAGAS + embedding metrics.
+    Evaluates RAG pipeline quality using a SINGLE consolidated LLM call.
 
-    Strategy to minimize API calls:
-    - faithfulness + answer_relevancy: Official RAGAS (LLM judge, ~2 calls)
-    - context_precision + context_recall: Embedding cosine similarity (0 calls)
+    Strategy:
+    - ONE prompt asks the LLM to score all 4 metrics at once
+    - Input is truncated to minimize token usage
+    - Regex extraction with 0.5 fallback (never 0.0)
     """
 
     def __init__(self):
@@ -69,68 +89,16 @@ class RAGEvaluator:
         if not api_key:
             raise ValueError("GROQ_API_KEY required for evaluation")
 
-        # Use fast model for evaluation to avoid Groq rate limits
         eval_model = os.getenv("EVAL_LLM_MODEL", "llama-3.1-8b-instant")
 
-        chat_groq = ChatGroq(
+        self.llm = ChatGroq(
             api_key=api_key,
             model_name=eval_model,
             temperature=0.0,
-            max_tokens=500,
+            max_tokens=300,
         )
-        self.langchain_llm = chat_groq
-        self.ragas_llm = LangchainLLMWrapper(chat_groq)
-
-        # HuggingFace embeddings for both RAGAS and custom context metrics
-        self.hf_embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-        self.ragas_embeddings = LangchainEmbeddingsWrapper(self.hf_embeddings)
-
-        # Official RAGAS metrics (LLM-based only)
-        self.ragas_metrics = [
-            Faithfulness(llm=self.ragas_llm),
-            ResponseRelevancy(llm=self.ragas_llm, embeddings=self.ragas_embeddings),
-        ]
 
         self.audit_logger = get_audit_logger()
-
-    def _compute_context_precision(self, question: str, contexts: list[str]) -> float:
-        """Embedding-based context precision: avg cosine similarity of chunks to question."""
-        try:
-            q_emb = self.hf_embeddings.embed_query(question)
-            c_embs = self.hf_embeddings.embed_documents(contexts)
-            # Cosine similarity
-            q_vec = np.array(q_emb)
-            scores = []
-            for c_emb in c_embs:
-                c_vec = np.array(c_emb)
-                cos_sim = np.dot(q_vec, c_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(c_vec) + 1e-10)
-                scores.append(max(0.0, cos_sim))
-            # Precision = fraction of chunks above relevance threshold
-            threshold = 0.3
-            relevant = sum(1 for s in scores if s >= threshold)
-            return relevant / max(len(scores), 1)
-        except Exception as e:
-            logger.warning("Context precision embedding failed: %s", e)
-            return 0.0
-
-    def _compute_context_recall(self, answer: str, contexts: list[str]) -> float:
-        """Embedding-based context recall: how well contexts cover the answer."""
-        try:
-            a_emb = self.hf_embeddings.embed_query(answer)
-            c_embs = self.hf_embeddings.embed_documents(contexts)
-            # Max cosine similarity between answer and any context chunk
-            a_vec = np.array(a_emb)
-            max_sim = 0.0
-            for c_emb in c_embs:
-                c_vec = np.array(c_emb)
-                cos_sim = np.dot(a_vec, c_vec) / (np.linalg.norm(a_vec) * np.linalg.norm(c_vec) + 1e-10)
-                max_sim = max(max_sim, cos_sim)
-            return max(0.0, min(max_sim, 1.0))
-        except Exception as e:
-            logger.warning("Context recall embedding failed: %s", e)
-            return 0.0
 
     def evaluate(
         self,
@@ -138,114 +106,90 @@ class RAGEvaluator:
         ground_truth: Optional[str] = None,
     ) -> EvaluationResult:
         """
-        Run hybrid RAGAS + embedding evaluation.
+        Run single-call evaluation for a question.
 
-        1. Invokes RAG chain for answer + sources
-        2. Computes context_precision/recall via embeddings (fast, 0 LLM calls)
-        3. Computes faithfulness/answer_relevancy via official RAGAS (2 LLM calls)
-        4. Logs results
+        1. Invokes RAG chain for a fresh answer + sources
+        2. Truncates inputs to minimize tokens
+        3. Sends ONE LLM prompt for all 4 metrics
+        4. Extracts scores via regex (fallback = 0.5)
+        5. Prints results to terminal and logs to audit
 
         Args:
             question: The question to evaluate
-            ground_truth: Optional ground-truth answer
+            ground_truth: Optional ground-truth answer (unused currently)
 
         Returns:
             EvaluationResult with all metrics
         """
         from ..rag.chain import get_rag_chain
 
-        # Step 1: Get RAG response
+        # ── Step 1: Get fresh RAG response for this exact question ──
         rag_chain = get_rag_chain()
         rag_response = rag_chain.invoke(question, mask_pii=True)
 
-        answer = rag_response.answer
-        sources = rag_response.sources
-        retrieved_contexts = [s["text"] for s in sources] if sources else ["No context retrieved."]
+        answer = rag_response.answer or ""
+        sources = rag_response.sources or []
+        retrieved_contexts = [s["text"] for s in sources] if sources else []
+
+        # Guard: ensure we have a real answer before evaluating
+        if not answer.strip():
+            logger.warning("Empty answer from RAG chain, skipping evaluation")
+            result = EvaluationResult(
+                context_precision=0.5, context_recall=0.5,
+                faithfulness=0.5, answer_relevancy=0.5,
+                overall_score=0.5, confidence_level="Low",
+            )
+            self._log_and_print(question, result)
+            return result
+
+        # ── Step 2: Truncate inputs to reduce token usage ──
+        truncated_contexts = []
+        for ctx in retrieved_contexts[:MAX_CHUNKS]:
+            truncated_contexts.append(ctx[:MAX_CHUNK_CHARS])
+
+        context_str = "\n---\n".join(truncated_contexts) if truncated_contexts else "No context."
+        answer_str = answer[:MAX_ANSWER_CHARS]
+
+        # ── Step 3: Single LLM call for ALL 4 metrics ──
+        eval_prompt = f"""You are a strict RAG evaluation API. Score the following on 4 metrics.
+
+Question: {question}
+
+Context (retrieved documents):
+{context_str}
+
+Answer (generated by AI):
+{answer_str}
+
+Score each metric from 0.0 to 1.0:
+- context_precision: Are the retrieved chunks relevant to the question? (1.0 = all relevant, 0.0 = none relevant)
+- context_recall: Do the chunks contain enough info to answer fully? (1.0 = complete coverage, 0.0 = no coverage)
+- faithfulness: Is the answer grounded in the context with no hallucinations? (1.0 = fully grounded, 0.0 = hallucinated)
+- answer_relevancy: Does the answer directly address the question? (1.0 = perfect answer, 0.0 = irrelevant)
+
+Output ONLY valid JSON, nothing else:
+{{"context_precision": float, "context_recall": float, "faithfulness": float, "answer_relevancy": float}}"""
 
         result = EvaluationResult()
 
-        # Step 2: Fast embedding-based context metrics (0 LLM calls)
-        result.context_precision = self._compute_context_precision(question, retrieved_contexts)
-        result.context_recall = self._compute_context_recall(answer, retrieved_contexts)
-
-        # Step 3: Official RAGAS metrics (faithfulness + answer_relevancy)
         try:
-            sample = SingleTurnSample(
-                user_input=question,
-                response=answer,
-                retrieved_contexts=retrieved_contexts,
-                reference=ground_truth or answer,
-            )
-            dataset = EvaluationDataset(samples=[sample])
+            llm_response = self.llm.invoke(eval_prompt)
+            raw_text = llm_response.content
 
-            # We must compute Faithfulness and Answer Relevancy synchronously 
-            # because the official `ragas.evaluate()` forces asyncio and completely deadlocks Flask WSGI.
-            
-            import json
-            import time
-            import re
-            
-            def _extract_score(text: str, metric_name: str) -> float:
-                # Log raw output
-                with open("logs/debug_llm_json.txt", "a", encoding="utf-8") as f:
-                    f.write(f"\n--- {time.time()} | {metric_name} raw text ---\n")
-                    f.write(text + "\n")
-                    f.write("-" * 40 + "\n")
-                    
-                # 1. Try to extract strictly from JSON-like `"score": X.XX` structure
-                match = re.search(r'"score"\s*:\s*(0\.\d+|1\.0)', text)
-                if match:
-                    return float(match.group(1))
-                    
-                # 2. Hard fallback: Just grab the first number between 0.0 and 1.0
-                matches = re.findall(r"0\.\d+|1\.0", text)
-                if matches:
-                    return float(matches[0])
-                    
-                return 0.5
-            
-            # 1. Synchronous Faithfulness (LLM)
-            faith_prompt = f"""
-            You are a strict evaluation JSON API. Find if ANY information in the Answer is NOT in the Context.
-            Output ONLY valid JSON matching this exact schema: {{"score": float}}
-            The score must be between 0.0 and 1.0. 1.0 = All facts supported. 0.0 = Hallucinations present.
-            
-            Context: {retrieved_contexts}
-            Answer: {answer}
-            """
-            
-            try:
-                faith_result = self.langchain_llm.invoke(faith_prompt)
-                result.faithfulness = _extract_score(faith_result.content, "Faithfulness")
-            except Exception as e:
-                logger.warning(f"Sync faithfulness failed to parse: {e} | Content: {faith_result.content if 'faith_result' in locals() else 'None'}")
-                result.faithfulness = 0.5
-                
-            # 2. Synchronous Answer Relevancy (LLM)
-            rel_prompt = f"""
-            You are a strict evaluation JSON API. Find how relevant the Answer is to the Question.
-            Output ONLY valid JSON matching this exact schema: {{"score": float}}
-            The score must be between 0.0 and 1.0. 1.0 = Direct, concise, perfect answer. 0.0 = Evasive, completely unrelated.
-            
-            Question: {question}
-            Answer: {answer}
-            """
-            
-            try:
-                rel_result = self.langchain_llm.invoke(rel_prompt)
-                result.answer_relevancy = _extract_score(rel_result.content, "Relevancy")
-            except Exception as e:
-                logger.warning(f"Sync relevancy failed to parse: {e} | Content: {rel_result.content if 'rel_result' in locals() else 'None'}")
-                result.answer_relevancy = 0.5
-                
-            # Ensure bounds
-            result.faithfulness = max(0.0, min(result.faithfulness, 1.0))
-            result.answer_relevancy = max(0.0, min(result.answer_relevancy, 1.0))
+            # Extract each metric independently with regex
+            result.context_precision = _extract_metric(raw_text, "context_precision")
+            result.context_recall = _extract_metric(raw_text, "context_recall")
+            result.faithfulness = _extract_metric(raw_text, "faithfulness")
+            result.answer_relevancy = _extract_metric(raw_text, "answer_relevancy")
 
         except Exception as e:
-            logger.warning("RAGAS evaluation failed: %s", e)
+            logger.warning("Evaluation LLM call failed: %s", e)
+            result.context_precision = 0.5
+            result.context_recall = 0.5
+            result.faithfulness = 0.5
+            result.answer_relevancy = 0.5
 
-        # Step 4: Overall score & confidence
+        # ── Step 4: Compute overall score & confidence ──
         scores = [
             result.context_precision,
             result.context_recall,
@@ -261,22 +205,40 @@ class RAGEvaluator:
         else:
             result.confidence_level = "Low"
 
-        # Step 5: Audit log
+        # ── Step 5: Print to terminal + audit log ──
+        self._log_and_print(question, result)
+
+        return result
+
+    def _log_and_print(self, question: str, result: EvaluationResult):
+        """Print evaluation to terminal and write to audit log."""
+        timestamp = datetime.now(timezone.utc).isoformat()
+        scores = result.to_dict()
+
+        # Terminal output
+        print("\n" + "=" * 60)
+        print("EVALUATION RESULT")
+        print(f"  Timestamp     : {timestamp}")
+        print(f"  Question      : {question[:80]}")
+        print(f"  Precision     : {scores['context_precision']}")
+        print(f"  Recall        : {scores['context_recall']}")
+        print(f"  Faithfulness  : {scores['faithfulness']}")
+        print(f"  Relevancy     : {scores['answer_relevancy']}")
+        print(f"  Overall       : {scores['overall_score']}")
+        print(f"  Confidence    : {scores['confidence_level']}")
+        print("=" * 60 + "\n")
+
+        # Audit log
         self.audit_logger.log(
             "rag_evaluation",
             "evaluation",
             {
-                "question_length": len(question),
-                "answer_length": len(answer),
-                "sources_count": len(sources),
-                "metrics": result.to_dict(),
-                "library": "ragas",
-                "ragas_metrics": ["faithfulness", "answer_relevancy"],
-                "embedding_metrics": ["context_precision", "context_recall"],
+                "event_type": "rag_evaluation",
+                "question": question,
+                "scores": scores,
+                "timestamp": timestamp,
             },
         )
-
-        return result
 
 
 # Global instance

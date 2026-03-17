@@ -19,12 +19,13 @@ logger = get_audit_logger()
 @eval_api.route("/evaluate", methods=["POST"])
 def evaluate_rag():
     """
-    Run RAGAS-style evaluation on a question.
+    Run single-call RAGAS evaluation on a question.
 
     POST /api/eval/evaluate
     Body: {"question": "...", "ground_truth": "..." (optional)}
 
-    Returns structured JSON with all metrics.
+    Evaluation results are printed to the terminal/log.
+    API returns JSON response for programmatic access.
     """
     data = request.get_json()
 
@@ -44,6 +45,7 @@ def evaluate_rag():
             ground_truth=ground_truth,
         )
 
+        # Results are already printed to terminal by evaluator._log_and_print()
         return jsonify({
             "status": "success",
             "evaluation": result.to_dict(),
