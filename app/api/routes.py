@@ -382,6 +382,9 @@ def chat():
     
     Expects JSON: {"message": "user message"}
     Returns: Assistant response
+    
+    Evaluation runs automatically in a background thread
+    and prints results ONLY to the terminal (never to UI).
     """
     data = request.get_json() or {}
     message = data.get("message", "").strip()
@@ -392,6 +395,19 @@ def chat():
     try:
         handler = get_response_handler()
         response = handler.process_message(message)
+        
+        # Fire evaluation in background thread (terminal-only output)
+        import threading
+        def _background_eval(question):
+            try:
+                from ..evaluation.evaluator import get_evaluator
+                evaluator = get_evaluator()
+                evaluator.evaluate(question=question)
+            except Exception as e:
+                print(f"[EVAL] Background evaluation failed: {e}")
+        
+        thread = threading.Thread(target=_background_eval, args=(message,), daemon=True)
+        thread.start()
         
         return jsonify({
             "response": response,
