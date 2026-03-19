@@ -467,8 +467,13 @@ class ResponseHandler:
             if entry.doc_type == "excel":
                 for sheet in entry.metadata.get("sheets", []):
                     sheet_name = sheet["name"]
-                    # distinct check: ensure sheet name is actually in the message
-                    if sheet_name.lower() in message_lower:
+                    import re
+                    # distinct check: ensure sheet name is actually in the message as a full word/phrase
+                    # and that the user is likely asking about a sheet/excel document
+                    sheet_match_pattern = r'\b' + re.escape(sheet_name.lower()) + r'\b'
+                    has_sheet_intent = any(kw in message_lower for kw in ["sheet", "tab", "excel", "formula", "calc", "cell", "row", "col"])
+                    
+                    if re.search(sheet_match_pattern, message_lower) and has_sheet_intent:
                         self.logger.log(
                             "smart_routing_triggered",
                             "chat",

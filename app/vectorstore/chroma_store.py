@@ -81,7 +81,10 @@ class VectorStore:
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
             name=self.COLLECTION_NAME,
-            metadata={"description": "Insurance document chunks"}
+            metadata={
+                "description": "Insurance document chunks",
+                "hnsw:space": "cosine"
+            }
         )
     
     def add_chunks(self, chunks: List[DocumentChunk]) -> int:
@@ -162,7 +165,7 @@ class VectorStore:
         # Build search kwargs
         search_kwargs = {
             "query_embeddings": [query_embedding],
-            "n_results": n_results,
+            "n_results": min(n_results, self.collection.count() or 1),
             "include": ["documents", "metadatas", "distances"]
         }
         
@@ -181,6 +184,8 @@ class VectorStore:
                     "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
                     "distance": results["distances"][0][i] if results["distances"] else 0
                 })
+        
+        print(f"[DEBUG SEARCH] Formatted results: {len(formatted)}")
         
         self.logger.log(
             "vector_search",
@@ -280,7 +285,10 @@ class VectorStore:
         self.client.delete_collection(self.COLLECTION_NAME)
         self.collection = self.client.create_collection(
             name=self.COLLECTION_NAME,
-            metadata={"description": "Insurance document chunks"}
+            metadata={
+                "description": "Insurance document chunks",
+                "hnsw:space": "cosine"
+            }
         )
         
         self.logger.log(
