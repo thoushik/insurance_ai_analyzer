@@ -133,9 +133,11 @@ class FolderGuard:
         Raises:
             SecurityViolationError: If path is outside allowed folder
         """
-        validated_path = self.validate_path(path)
-        
-        with open(validated_path, mode) as f:
+        kwargs = {}
+        if 'b' not in mode:
+            kwargs['encoding'] = 'utf-8'
+            
+        with open(validated_path, mode, **kwargs) as f:
             return f.read()
     
     def safe_write(self, path: str | Path, content: str | bytes, mode: str = 'w'):
@@ -167,7 +169,11 @@ class FolderGuard:
         # Ensure parent directory exists
         validated_path.parent.mkdir(parents=True, exist_ok=True)
         
-        with open(validated_path, mode) as f:
+        kwargs = {}
+        if 'b' not in mode:
+            kwargs['encoding'] = 'utf-8'
+        
+        with open(validated_path, mode, **kwargs) as f:
             f.write(content)
     
     def list_uploads(self) -> list[Path]:
